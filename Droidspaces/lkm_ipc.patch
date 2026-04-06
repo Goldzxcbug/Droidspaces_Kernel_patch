@@ -1,6 +1,6 @@
 --- a/ipc/namespace.c
 +++ b/ipc/namespace.c
-@@ -192,6 +192,7 @@ void put_ipc_ns(struct ipc_namespace *ns)
+@@ -192,6 +192,7 @@
  			schedule_work(&free_ipc_work);
  	}
  }
@@ -8,13 +8,10 @@
  
  static inline struct ipc_namespace *to_ipc_ns(struct ns_common *ns)
  {
-@@ -236,3 +237,10 @@ const struct proc_ns_operations ipcns_operations = {
+@@ -236,3 +237,6 @@
  	.install	= ipcns_install,
  	.owner		= ipcns_owner,
  };
 +
-+/* + * 为 Rust Binder 模块导出初始 IPC 命名空间
-+ * 虽然它可能在别处定义，但我们可以在这里统一导出
-+ */
 +extern struct ipc_namespace init_ipc_ns;
 +EXPORT_SYMBOL_GPL(init_ipc_ns);
