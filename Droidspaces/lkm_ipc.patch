@@ -1,0 +1,21 @@
+
+Subject: [PATCH] EXPORT_SYMBOL init_ipc_ns and put_ipc_ns for Rust Binder
+
+---
+ kernel/nsproxy.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/kernel/nsproxy.c b/kernel/nsproxy.c
+index 1234567..89abcde 100644
+--- a/kernel/nsproxy.c
++++ b/kernel/nsproxy.c
+@@
+ int __init nsproxy_cache_init(void)
+ {
+ 	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC|SLAB_ACCOUNT);
+ 	return 0;
++}
++
++/* Export IPC namespace symbols for Rust Binder module */
++EXPORT_SYMBOL(init_ipc_ns);
++EXPORT_SYMBOL(put_ipc_ns);
