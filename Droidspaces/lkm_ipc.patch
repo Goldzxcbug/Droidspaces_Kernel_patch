@@ -1,21 +1,20 @@
-
-Subject: [PATCH] EXPORT_SYMBOL init_ipc_ns and put_ipc_ns for Rust Binder
-
----
- kernel/nsproxy.c | 2 ++
- 1 file changed, 2 insertions(+)
-
-diff --git a/kernel/nsproxy.c b/kernel/nsproxy.c
-index 1234567..89abcde 100644
---- a/kernel/nsproxy.c
-+++ b/kernel/nsproxy.c
-@@
- int __init nsproxy_cache_init(void)
+--- a/ipc/namespace.c
++++ b/ipc/namespace.c
+@@ -192,6 +192,7 @@ void put_ipc_ns(struct ipc_namespace *ns)
+ 			schedule_work(&free_ipc_work);
+ 	}
+ }
++EXPORT_SYMBOL_GPL(put_ipc_ns);
+ 
+ static inline struct ipc_namespace *to_ipc_ns(struct ns_common *ns)
  {
- 	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC|SLAB_ACCOUNT);
- 	return 0;
-+}
+@@ -236,3 +237,10 @@ const struct proc_ns_operations ipcns_operations = {
+ 	.install	= ipcns_install,
+ 	.owner		= ipcns_owner,
+ };
 +
-+/* Export IPC namespace symbols for Rust Binder module */
-+EXPORT_SYMBOL(init_ipc_ns);
-+EXPORT_SYMBOL(put_ipc_ns);
++/* + * 为 Rust Binder 模块导出初始 IPC 命名空间
++ * 虽然它可能在别处定义，但我们可以在这里统一导出
++ */
++extern struct ipc_namespace init_ipc_ns;
++EXPORT_SYMBOL_GPL(init_ipc_ns);
