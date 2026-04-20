@@ -1,0 +1,32 @@
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index dd6b1d58af014..601bb232460cc 100755
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1075,10 +1075,6 @@ struct task_struct {
+ 
+ 	struct nameidata		*nameidata;
+ 
+-#ifdef CONFIG_SYSVIPC
+-	struct sysv_sem			sysvsem;
+-	struct sysv_shm			sysvshm;
+-#endif
+ #ifdef CONFIG_DETECT_HUNG_TASK
+ 	unsigned long			last_switch_count;
+ 	unsigned long			last_switch_time;
+@@ -1520,9 +1516,14 @@ struct task_struct {
+ 	 */
+ 	struct callback_head		l1d_flush_kill;
+ #endif
++#if defined(CONFIG_SYSVIPC)
++	ANDROID_KABI_USE(1, struct sysv_sem sysvsem);
++	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(2); ANDROID_KABI_RESERVE(3), struct sysv_shm sysvshm);
++#else
+ 	ANDROID_KABI_RESERVE(1);
+ 	ANDROID_KABI_RESERVE(2);
+ 	ANDROID_KABI_RESERVE(3);
++#endif
+ 	ANDROID_KABI_RESERVE(4);
+ 	ANDROID_KABI_RESERVE(5);
+ 	ANDROID_KABI_RESERVE(6);
+diff --git a/include/net/net_namespace.h b/include/net/net_namespace.h
+index c85c8c25a8485..2e6630a80794d 100644
