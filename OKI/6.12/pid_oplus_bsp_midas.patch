@@ -60,3 +60,4 @@
 +#if defined(CONFIG_NF_TABLES) || defined(CONFIG_NF_TABLES_MODULE)
 +#define net_nft(_net)		((_net)->ext->nft)
 +#endif
+
