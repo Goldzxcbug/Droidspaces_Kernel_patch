@@ -37,22 +37,6 @@ index 75b7e99be7a9d..14c5926d814d5 100644
  
  	fc->s_fs_info		= ofs;
  	fc->fs_private		= ctx;
-diff --git a/fs/overlayfs/util.c b/fs/overlayfs/util.c
-index 6c60141fec4f5..0ae6cc5b9f87c 100644
---- a/fs/overlayfs/util.c
-+++ b/fs/overlayfs/util.c
-@@ -183,10 +183,7 @@ bool ovl_dentry_weird(struct dentry *dentry)
- 	if (!d_can_lookup(dentry) && !d_is_file(dentry) && !d_is_symlink(dentry))
- 		return true;
- 
--	return dentry->d_flags & (DCACHE_NEED_AUTOMOUNT |
--				  DCACHE_MANAGE_TRANSIT |
--				  DCACHE_OP_HASH |
--				  DCACHE_OP_COMPARE);
-+	return dentry->d_flags & (DCACHE_NEED_AUTOMOUNT | DCACHE_MANAGE_TRANSIT);
- }
- 
- enum ovl_path_type ovl_path_type(struct dentry *dentry)
 diff --git a/include/linux/netdevice.h b/include/linux/netdevice.h
 index ac4b8b828364a..25ca57c690f4c 100644
 --- a/include/linux/netdevice.h
