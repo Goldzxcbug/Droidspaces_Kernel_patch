@@ -1,4 +1,4 @@
-| 内核系列 | 版本 | 状态 | 说明 | NTsync 所需补丁 |
+| 内核系列 | 版本 | 目前状态 | 说明 | NTsync 所需补丁 |
 |---------|------|------|------|----------------|
 | **OKI** | 6.12 | ⚠️ 测试中（容器可能不定时重启） | Droidspaces ≥ v5.9.5 | `ntsync_compat_android16-6.12.patch`（仅此一个） |
 | | 6.6 | ✅ 完美运行 | Droidspaces 全版本支持 | `ntsync_base.patch` + `ntsync_compat_android15-6.6.patch` |
@@ -40,4 +40,8 @@ CONFIG_CGROUPS=y
 CONFIG_CGROUP_DEVICE=y
 CONFIG_CGROUP_PIDS=y
 CONFIG_MEMCG=y
+```
+## NTsync 所要配置
+```txt
+CONFIG_NTSYNC=y
 ```
