@@ -12,7 +12,7 @@
 > 
 > `❓ 未测试` 代表的是无设备验证，不确定是否稳定
 >
-> `💡Droidspaces` 所要文件 [点我跳转](https://ipv6.goldzxcbug.top/%E7%A7%BB%E5%8A%A8-Droidspaces-OSS)
+> `💡Droidspaces` 所要文件 [点我跳转](https://cdn.goldzxcbug.top/%E7%A7%BB%E5%8A%A8-Droidspaces-OSS)
 ## Droidspaecs ≥ v5.9.5 所要配置
 ```txt
 # IPC
