@@ -1,14 +1,85 @@
-| 内核系列 | 版本 | 状态 | 说明 | NTsync 所需补丁 |
-|----------|------|----------|------|----------------|
-| **OKI** | 6.12 | ⚠️ 测试中 | Droidspaces ≥ v5.9.5 | `ntsync_compat_android16-6.12.patch`（仅此一个） |
-| | 6.6 | ✅ 完美运行 | Droidspaces 全版本支持 | `ntsync_base.patch` + `ntsync_compat_android15-6.6.patch` |
-| | 6.1 | ✅ 完美运行 | • Droidspaces ≥ v5.9.5：仅打 `04.use_android_abi_padding_for_sysvipc_task_struct.patch`<br>• 更低版本：打全所有补丁 | `ntsync_base.patch` + `ntsync_compat_android14-6.1.patch` |
-| | 5.15 | ✅ 完美运行 | • Droidspaces ≥ v5.9.5：仅打 `04.use_android_abi_padding_for_sysvipc_task_struct.patch`<br>• 更低版本：打全所有补丁 | `ntsync_base.patch` + `ntsync_compat_android13-5.15.patch`|
-| **GKI** | 6.12 | ✅ 完美运行 | Droidspaces 全版本支持 | `ntsync_compat_android16-6.12.patch`（仅此一个）  |
-| | 6.6 | ✅ 完美运行| Droidspaces ≥ v5.9.5 | ❓未测试 |
-| | 6.1 | ✅ 完美运行| Droidspaces ≥ v5.9.5 | ❓未测试 |
-| | 5.15 | ✅ 完美运行| Droidspaces ≥ v5.9.5 💥特殊 <br>• Xiaomi Pad6S pro :使用3-4-5<br>• Redmi K70 :使用6-7-8<br>• 其他机型自行测试| ❓未测试 |
-| | 5.10 | ✅ 完美运行| Droidspaces ≥ v5.9.5 | ❓未测试 |
+<table>
+  <thead>
+    <tr>
+      <th width="10%">内核系列</th>
+      <th width="8%">版本</th>
+      <th width="12%">状态</th>
+      <th width="30%">说明</th>
+      <th width="20%">NTsync 所需补丁</th>
+      <th width="20%">测试通过的机型</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="4" align="center"><b>OKI</b></td>
+      <td align="center">6.12</td>
+      <td align="center">⚠️ 测试中</td>
+      <td>Droidspaces ≥ v5.9.5</td>
+      <td><code>仅打 android16-6.12.patch</code></td>
+      <td>• OnePlus 15</td>
+    </tr>
+    <tr>
+      <td align="center">6.6</td>
+      <td align="center">✅ 完美运行</td>
+      <td>Droidspaces 全版本支持</td>
+      <td><code>ntsync_base.patch</code> + <code>android15-6.6.patch</code></td>
+      <td>• OnePlus Pad 2 Pro<br>• OnePlus 13<br>• OnePlus Ace 6<br>• OnePlus Ace 5 Pro<br>• OnePlus 13T<br>• OnePlus Ace 5 Ultra</td>
+    </tr>
+    <tr>
+      <td align="center">6.1</td>
+      <td align="center">✅ 完美运行</td>
+      <td>• Droidspaces ≥ v5.9.5：仅打 <code>04.sysvipc_task_struct.patch</code> 补丁<br>• 更低版本：打全所有补丁</td>
+      <td><code>ntsync_base.patch</code> + <code>android14-6.1.patch</code></td>
+      <td>• OnePlus Ace 3 Pro<br>• OnePlus 12<br>• OnePlus Pad Pro<br>• Realme GT 5 Pro</td>
+    </tr>
+    <tr>
+      <td align="center">5.15</td>
+      <td align="center">✅ 完美运行</td>
+      <td>• Droidspaces ≥ v5.9.5：仅打 <code>04.sysvipc_task_struct.patch</code> 补丁<br>• 更低版本：打全所有补丁</td>
+      <td><code>ntsync_base.patch</code> + <code>android13-5.15.patch</code></td>
+      <td>• OnePlus Ace 3</td>
+    </tr>
+    <tr>
+      <td rowspan="5" align="center"><b>GKI</b></td>
+      <td align="center">6.12</td>
+      <td align="center">✅ 完美运行</td>
+      <td>Droidspaces 全版本支持</td>
+      <td><code>仅打 android16-6.12.patch</code></td>
+      <td>• Redmi K90 Pro Max<br>• Xiaomi 17 Pro Max<br>• 红魔 11</td>
+    </tr>
+    <tr>
+      <td align="center">6.6</td>
+      <td align="center">✅ 完美运行</td>
+      <td>Droidspaces ≥ v5.9.5</td>
+      <td align="center">❓未测试</td>
+      <td>暂无</td>
+    </tr>
+    <tr>
+      <td align="center">6.1</td>
+      <td align="center">✅ 完美运行</td>
+      <td>Droidspaces ≥ v5.9.5</td>
+      <td align="center">❓未测试</td>
+      <td>暂无</td>
+    </tr>
+    <tr>
+      <td align="center">5.15</td>
+      <td align="center">✅ 完美运行</td>
+      <td>Droidspaces ≥ v5.9.5 💥特殊<br>• Xiaomi Pad6S pro :使用3-4-5<br>• Redmi K70 :使用6-7-8<br>• 其他机型自行测试</td>
+      <td align="center">❓未测试</td>
+      <td>• Xiaomi Pad6S Pro<br>• Redmi K70</td>
+    </tr>
+    <tr>
+      <td align="center">5.10</td>
+      <td align="center">✅ 完美运行</td>
+      <td>Droidspaces ≥ v5.9.5</td>
+      <td align="center">❓未测试</td>
+      <td>• Xiaomi Pad 6 Max<br>• Xiaomi Pad 6 Pro</td>
+    </tr>
+  </tbody>
+</table>
+
+
+
 > `⚠️ 测试中` 代表的是可能出现不定时重启
 > 
 > `✅ 完美运行 ` 代表的是经过多数设备的长期验证，可以稳定运行
