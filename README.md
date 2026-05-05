@@ -51,7 +51,7 @@
       <td align="center">6.6</td>
       <td align="center">✅ 完美运行</td>
       <td>Droidspaces ≥ v5.9.5</td>
-      <td align="center">❓未测试</td>
+       <td><code>ntsync_base.patch</code> + <code>android15-6.6.patch</code></td>
       <td>• 小米 Pad 8 Pro</td>
     </tr>
     <tr>
