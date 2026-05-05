@@ -60,7 +60,7 @@
               
             # 修复 [✗] devtmpfs support
               echo "CONFIG_DEVTMPFS=y" >> ./common/arch/arm64/configs/gki_defconfig
-      - name: 注入NTsync内核配置
+      - name: 注入NTsync内核配置（可选）
         run: |
             cd kernel_workspace/common
             wget "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch"
