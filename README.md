@@ -65,7 +65,7 @@
       <td align="center">5.15</td>
       <td align="center">✅ 完美运行</td>
       <td>Droidspaces ≥ v5.9.5 💥特殊<br>• 小米 Pad6S pro :使用3-4-5<br>• 红米 K70 :使用6-7-8<br>• 其他机型自行测试</td>
-      <td align="center">❓未测试</td>
+      <td><code>ntsync_base.patch</code> + <code>android13-5.15.patch</code></td>
       <td>• 小米 Pad6S Pro<br>• 红米 K70</td>
     </tr>
     <tr>
