@@ -1,4 +1,4 @@
-|OKI内核|6.12|6.6|6.1|5.15|
+|OKI<br>内核|6.12|6.6|6.1|5.15|
 |-|-|-|-|-|
 |状态|⚠️测试中|✅完美运行|✅完美运行|✅完美运行|
 |说明|Droidspaces≥v5.9.5|Droidspaces全版本支持|• Droidspaces≥v5.9.5：仅打04.sysvipc_task_struct.patch<br>• 更低版本：打全所有补丁|• Droidspaces≥v5.9.5：仅打04.sysvipc_task_struct.patch<br>• 更低版本：打全所有补丁|
@@ -6,7 +6,7 @@
 |测试通过的机型|• 一加15|• 一加Pad2Pro<br>• 一加13<br>• 一加Ace6<br>• 一加Ace5Pro<br>• 一加13T<br>• 一加Ace5至尊版(⚠️测试中)|• 一加Ace3Pro<br>• 一加12<br>• 一加PadPro<br>• 真我GT5Pro|• 一加Ace3|
 
 
-|GKI内核|6.12|6.6|6.1|5.15|5.10|
+|GKI<br>内核|6.12|6.6|6.1|5.15|5.10|
 |-|-|-|-|-|-|
 |状态|✅完美运行|✅完美运行|✅完美运行|✅完美运行|✅完美运行|
 |说明|Droidspaces全版本支持|Droidspaces≥v5.9.5|Droidspaces≥v5.9.5|Droidspaces≥v5.9.5💥特殊<br>• 小米Pad6Spro:使用3-4-5<br>• 红米K70:使用6-7-8<br>• 其他机型自行测试|Droidspaces≥v5.9.5|
