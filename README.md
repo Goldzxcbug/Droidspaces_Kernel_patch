@@ -4,7 +4,7 @@
 | 状态 | ⚠️测试中 | ✅完美运行 | ✅完美运行 | ✅完美运行 | ✅完美运行 |
 | 说明 | Droidspaces≥v5.9.5 | Droidspaces全版本支持 | • Droidspaces≥v5.9.5：仅打04.sysvipc_task_struct.patch<br>• 更低版本：打全所有补丁 | • Droidspaces≥v5.9.5：仅打04.sysvipc_task_struct.patch<br>• 更低版本：打全所有补丁 |Droidspaces≥v5.9.5 |
 | NTsync所需补丁 | 仅打android16-6.12.patch | ntsync_base.patch<br>+<br>android15-6.6.patch | ntsync_base.patch<br>+<br>android14-6.1.patch | ntsync_base.patch<br>+<br>android13-5.15.patch |❓ 未测试 |
-| 测试通过的机型 | <div align="left">• 一加15</div> | <div align="left">• 一加Pad2Pro<br>• 一加13<br>• 一加Ace6<br>• 一加Ace5Pro<br>• 一加13T<br>• 一加Ace5至尊版(⚠️测试中)</div> | <div align="left">• 一加Ace3Pro<br>• 一加12<br>• 一加PadPro<br>• 真我GT5Pro</div> | <div align="left">• 一加Ace3</div> |<div align="left">• 一加Ace 竞速版</div> |
+| 测试通过的机型 | <div align="left">• 一加15</div> | <div align="left">• 一加Pad2Pro<br>• 一加13<br>• 一加Ace6<br>• 一加Ace5Pro<br>• 一加13T<br>• 一加Ace5至尊版(⚠️测试中)<br>• 华硕rog9pro</div> | <div align="left">• 一加Ace3Pro<br>• 一加12<br>• 一加PadPro<br>• 真我GT5Pro</div> | <div align="left">• 一加Ace3</div> |<div align="left">• 一加Ace 竞速版</div> |
 
 | GKI<br>内核 | 6.12 | 6.6 | 6.1 | 5.15 | 5.10 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
