@@ -1,0 +1,14 @@
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 20002dfd149b..3a292c29faa6 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -9026,7 +9026,8 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf
+ 	trace_android_rvh_before_pick_task_fair(rq, &p, prev, rf);
+ 	if (!p) {
+ 		p = pick_task_fair(rq);
+-		trace_android_rvh_replace_next_task_fair(rq, &p, prev);
++		if(p->pid<PID_MAX_DEFAULT)
++			trace_android_rvh_replace_next_task_fair(rq, &p, prev);
+ 	}
+ 
+ 	if (!p)
