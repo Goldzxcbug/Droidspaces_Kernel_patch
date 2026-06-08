@@ -11,7 +11,7 @@
 | 状态 | ✅完美运行 | ✅完美运行 | ✅完美运行 | ✅完美运行 | ✅完美运行 |
 | 说明 | Droidspaces全版本支持 | Droidspaces≥v5.9.5 | Droidspaces≥v5.9.5 | Droidspaces≥v5.9.5 | Droidspaces≥v5.9.5 |
 | NTsync所需补丁 | 仅打android16-6.12.patch <br>• 米系设备使用可能会造成无法开热点等问题 | ntsync_base.patch<br>+<br>android15-6.6.patch | ntsync_base.patch<br>+<br>android14-6.1.patch | ntsync_base.patch<br>+<br>android13-5.15.patch | ntsync_base.patch<br>+<br>android12-5.10.patch |
-| 测试通过的机型 | <div align="left">• 红米K90ProMax<br>• 小米17 系列<br>• 红魔11<br>• 荣耀magicPad3Pro</div> | <div align="left">• 小米Pad8Pro<br>• 小米15</div> | <div align="left">• 小米14<br>• 小米Pad7<br>• 小米mix Flip<br>• 红魔9SPro+<br>• 红魔9Pro<br>• 渣掌玩Mini 3 Ultra</div> | <div align="left">• 小米Pad6SPro<br>• 红米K70</div> | <div align="left">• 小米Pad6Max<br>• 小米Pad6Pro<br>• 红米K50Ultra<br>• 红米K60</div> |
+| 测试通过的机型 | <div align="left">• 红米K90ProMax<br>• 小米17 系列<br>• 红魔11<br>• 荣耀magicPad3Pro</div> | <div align="left">• 小米Pad8Pro<br>• 小米15</div> | <div align="left">• 小米14<br>• 小米Pad7<br>• 小米mix Flip<br>• 红魔9SPro+<br>• 红魔9Pro<br>• 掌玩Mini 3 Ultra</div> | <div align="left">• 小米Pad6SPro<br>• 红米K70</div> | <div align="left">• 小米Pad6Max<br>• 小米Pad6Pro<br>• 红米K50Ultra<br>• 红米K60</div> |
 
 
 > `⚠️ 测试中` 代表的是可能出现不定时重启
