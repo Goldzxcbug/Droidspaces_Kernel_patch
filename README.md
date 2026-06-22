@@ -44,6 +44,9 @@ CONFIG_PID_NS=y
 
 # 硬件访问
 CONFIG_DEVTMPFS=y
+
+# 用户命名空间(不是必备，但是docker,KDE桌面必须要开)
+CONFIG_USER_NS=y
 ```
 
 ## Droidspaces < v5.9.5 所要配置
