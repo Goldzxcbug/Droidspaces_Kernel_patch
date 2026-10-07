@@ -89,6 +89,10 @@ CONFIG_NETFILTER_XT_SET=y
 # 在 tmpfs 上启用 xattr 支持
 # (运行 NixOS 必备选项)
 CONFIG_TMPFS_XATTR=y
+
+#内存限制，CPU限制
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_CGROUP_PIDS=y
 ```
 ## NTsync 所要配置
 ```txt
