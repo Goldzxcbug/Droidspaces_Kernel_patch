@@ -1,0 +1,856 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Droidspaces-OKI <noreply@example.com>
+Date: Tue, 27 Oct 2026 21:00:00 +0800
+Subject: [PATCH] cgroup: preserve 6.12.23 KMI when enabling PIDS
+
+Target: Android GKI android16-6.12-2025-06 and OnePlus 15 6.12.23
+Frozen configuration: CONFIG_CGROUP_PIDS=n
+
+Keep the frozen subsystem IDs, public cgroup/css_set arrays and all
+Android KABI/backport reserves unchanged. Append only PIDS to the runtime
+controller table and use a separate active count for iteration, masks,
+hashing, migration and cgroup.stat.
+
+Store the PIDS state, cset links and 6.12 dying-CSS counter in private
+allocation tails. Dynamic css_sets, cgroup roots and non-root cgroups
+allocate their extension together with the owner, so allocation failures,
+error cleanup and RCU teardown share the existing lifetime. Static boot
+objects use separate static storage. Place non-root extensions after the
+full ancestors[] allocation and initialize root/level before housekeeping.
+
+Adapt the cgroup access helpers from the FullDocker implementation in
+superturtlee/kernel-workshop-docker.
+Use the private-tail KMI approach from the sibling 6.1/6.6 limits patches.
+Module symbol version checking is retained.
+
+Enable CONFIG_CGROUP_PIDS=y in the target kernel configuration separately.
+CONFIG_CFS_BANDWIDTH=y is already supported by these 6.12 target trees.
+Other controller options must match the frozen vendor configuration.
+This patch targets a KMI frozen with PIDS disabled.
+
+Usage from the common kernel source directory:
+    patch -p1 < fix_cgroup_limits_kabi_6.12.23.patch
+
+Link: https://github.com/cctv18/android_gki_kernel_common/commit/9e91eb74a201e8cee839c8db6d642ff9b8408388
+Link: https://github.com/cctv18/android_kernel_common_oneplus_sm8850/commit/1fdec1073c8fa24282dcbe8395593759c2ce0d17
+Link: https://github.com/superturtlee/kernel-workshop-docker/tree/31ec2d1d36bf448c84b133ff0a24137eb4bafb11
+
+diff --git a/include/linux/cgroup-defs.h b/include/linux/cgroup-defs.h
+index 8f28ec157674..2dbbbb29fa63 100644
+--- a/include/linux/cgroup-defs.h
++++ b/include/linux/cgroup-defs.h
+@@ -41,11 +41,26 @@
+ 
+ /* define the enumeration of all cgroup subsystems */
+ #define SUBSYS(_x) _x ## _cgrp_id,
++#define CGROUP_SUBSYS_KABI
+ enum cgroup_subsys_id {
+ #include <linux/cgroup_subsys.h>
+ 	CGROUP_SUBSYS_COUNT,
+ };
++
++#undef CGROUP_SUBSYS_KABI
+ #undef SUBSYS
++
++/*
++ * Keep the original IDs and array bounds when enabling PIDS on a kernel
++ * whose Android KMI was frozen with CONFIG_CGROUP_PIDS=n.  Only cgroup core
++ * walks the extra runtime slot; ABI-visible arrays retain their old bounds.
++ */
++#ifdef CONFIG_CGROUP_PIDS
++enum { pids_cgrp_id = CGROUP_SUBSYS_COUNT };
++#define CGROUP_SUBSYS_COUNT_ACTIVE (CGROUP_SUBSYS_COUNT + 1)
++#else
++#define CGROUP_SUBSYS_COUNT_ACTIVE CGROUP_SUBSYS_COUNT
++#endif
+ 
+ /* bits in struct cgroup_subsys_state flags field */
+ enum {
+diff --git a/include/linux/cgroup.h b/include/linux/cgroup.h
+index fe86f3e6c290..d5f720a842ca 100644
+--- a/include/linux/cgroup.h
++++ b/include/linux/cgroup.h
+@@ -74,6 +74,20 @@
+ extern struct css_set init_css_set;
+ extern spinlock_t css_set_lock;
+ 
++#ifdef CONFIG_CGROUP_PIDS
++struct cgroup_subsys_state *css_set_pids(struct css_set *cset);
++#endif
++
++static inline struct cgroup_subsys_state *
++css_set_subsys(struct css_set *cset, int ssid)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id)
++		return css_set_pids(cset);
++#endif
++	return cset->subsys[ssid];
++}
++
+ #define SUBSYS(_x) extern struct cgroup_subsys _x ## _cgrp_subsys;
+ #include <linux/cgroup_subsys.h>
+ #undef SUBSYS
+@@ -411,7 +425,7 @@
+  * synchronization rules are the same as task_css_set_check().
+  */
+ #define task_css_check(task, subsys_id, __c)				\
+-	task_css_set_check((task), (__c))->subsys[(subsys_id)]
++	css_set_subsys(task_css_set_check((task), (__c)), (subsys_id))
+ 
+ /**
+  * task_css_set - obtain a task's css_set
+@@ -479,7 +493,7 @@
+ static inline bool task_css_is_root(struct task_struct *task, int subsys_id)
+ {
+ 	return task_css_check(task, subsys_id, true) ==
+-		init_css_set.subsys[subsys_id];
++		css_set_subsys(&init_css_set, subsys_id);
+ }
+ 
+ static inline struct cgroup *task_cgroup(struct task_struct *task,
+diff --git a/include/linux/cgroup_subsys.h b/include/linux/cgroup_subsys.h
+index 445235487230..f4d3ed3c5023 100644
+--- a/include/linux/cgroup_subsys.h
++++ b/include/linux/cgroup_subsys.h
+@@ -53,10 +53,6 @@
+ SUBSYS(hugetlb)
+ #endif
+ 
+-#if IS_ENABLED(CONFIG_CGROUP_PIDS)
+-SUBSYS(pids)
+-#endif
+-
+ #if IS_ENABLED(CONFIG_CGROUP_RDMA)
+ SUBSYS(rdma)
+ #endif
+@@ -73,5 +69,13 @@
+ #endif
+ 
+ /*
++ * PIDS is appended after the frozen Android subsystem IDs.  Its state is
++ * kept out of the ABI-visible per-subsystem arrays; see cgroup-defs.h.
++ */
++#if IS_ENABLED(CONFIG_CGROUP_PIDS) && !defined(CGROUP_SUBSYS_KABI)
++SUBSYS(pids)
++#endif
++
++/*
+  * DO NOT ADD ANY SUBSYSTEM WITHOUT EXPLICIT ACKS FROM CGROUP MAINTAINERS.
+  */
+diff --git a/kernel/cgroup/cgroup-internal.h b/kernel/cgroup/cgroup-internal.h
+index c964dd7ff967..c952c8be93ab 100644
+--- a/kernel/cgroup/cgroup-internal.h
++++ b/kernel/cgroup/cgroup-internal.h
+@@ -8,6 +8,22 @@
+ #include <linux/list.h>
+ #include <linux/refcount.h>
+ #include <linux/fs_parser.h>
++
++/* Private tail storage, never part of an Android KMI-visible structure. */
++#ifdef CONFIG_CGROUP_PIDS
++struct cgroup_pids_kabi {
++	struct cgroup_subsys_state __rcu *subsys;
++	int nr_dying_subsys;
++	struct list_head e_csets;
++};
++
++#define CGROUP_PIDS_KABI_SIZE sizeof(struct cgroup_pids_kabi)
++#else
++#define CGROUP_PIDS_KABI_SIZE 0
++#endif
++
++struct cgroup_subsys_state __rcu **
++cgroup_subsys_slot(struct cgroup *cgrp, int ssid);
+ 
+ #define TRACE_CGROUP_PATH_LEN 1024
+ extern spinlock_t trace_cgroup_path_lock;
+@@ -177,10 +193,10 @@
+ /**
+  * for_each_subsys - iterate all enabled cgroup subsystems
+  * @ss: the iteration cursor
+- * @ssid: the index of @ss, CGROUP_SUBSYS_COUNT after reaching the end
++ * @ssid: the index of @ss, CGROUP_SUBSYS_COUNT_ACTIVE after reaching the end
+  */
+ #define for_each_subsys(ss, ssid)					\
+-	for ((ssid) = 0; (ssid) < CGROUP_SUBSYS_COUNT &&		\
++	for ((ssid) = 0; (ssid) < CGROUP_SUBSYS_COUNT_ACTIVE &&		\
+ 	     (((ss) = cgroup_subsys[ssid]) || true); (ssid)++)
+ 
+ static inline bool cgroup_is_dead(const struct cgroup *cgrp)
+diff --git a/kernel/cgroup/cgroup-v1.c b/kernel/cgroup/cgroup-v1.c
+index 43c959a483b6..d8293038f34a 100644
+--- a/kernel/cgroup/cgroup-v1.c
++++ b/kernel/cgroup/cgroup-v1.c
+@@ -1228,7 +1228,7 @@
+ 	if (ctx->ns != &init_cgroup_ns)
+ 		return -EPERM;
+ 
+-	root = kzalloc(sizeof(*root), GFP_KERNEL);
++	root = kzalloc(sizeof(*root) + CGROUP_PIDS_KABI_SIZE, GFP_KERNEL);
+ 	if (!root)
+ 		return -ENOMEM;
+ 
+diff --git a/kernel/cgroup/cgroup.c b/kernel/cgroup/cgroup.c
+index cb49a9424491..530b9818fc2a 100644
+--- a/kernel/cgroup/cgroup.c
++++ b/kernel/cgroup/cgroup.c
+@@ -75,10 +75,10 @@
+ /*
+  * To avoid confusing the compiler (and generating warnings) with code
+  * that attempts to access what would be a 0-element array (i.e. sized
+- * to a potentially empty array when CGROUP_SUBSYS_COUNT == 0), this
++ * to a potentially empty array when CGROUP_SUBSYS_COUNT_ACTIVE == 0), this
+  * constant expression can be added.
+  */
+-#define CGROUP_HAS_SUBSYS_CONFIG	(CGROUP_SUBSYS_COUNT > 0)
++#define CGROUP_HAS_SUBSYS_CONFIG	(CGROUP_SUBSYS_COUNT_ACTIVE > 0)
+ 
+ /*
+  * cgroup_mutex is the master lock.  Any modification to cgroup or its
+@@ -164,6 +164,118 @@
+ #include <linux/cgroup_subsys.h>
+ };
+ #undef SUBSYS
++
++#ifdef CONFIG_CGROUP_PIDS
++struct css_set_pids_kabi {
++	struct cgroup_subsys_state *subsys;
++	struct list_head e_cset_node;
++};
++
++/* The two boot-time objects are static and therefore have no allocation tail. */
++static struct css_set_pids_kabi init_css_set_pids = {
++	.e_cset_node = LIST_HEAD_INIT(init_css_set_pids.e_cset_node),
++};
++
++static struct cgroup_pids_kabi cgrp_dfl_root_pids;
++
++static struct css_set_pids_kabi *css_set_pids_storage(struct css_set *cset)
++{
++	if (cset == &init_css_set)
++		return &init_css_set_pids;
++	return (struct css_set_pids_kabi *)(cset + 1);
++}
++
++/*
++ * Dynamic roots allocate the extension after struct cgroup_root.  Other
++ * cgroups allocate it after the full object and its ancestors[] storage.
++ * Trailing structure alignment padding remains untouched.  Both root and
++ * level must therefore be set before init_cgroup_housekeeping().  These
++ * tails share their owner's allocation and RCU lifetime.
++ */
++static struct cgroup_pids_kabi *cgroup_pids_storage(struct cgroup *cgrp)
++{
++	if (cgrp == &cgrp_dfl_root.cgrp)
++		return &cgrp_dfl_root_pids;
++	if (!cgrp->level)
++		return (struct cgroup_pids_kabi *)(cgrp->root + 1);
++	return (struct cgroup_pids_kabi *)((char *)cgrp +
++		struct_size(cgrp, ancestors, cgrp->level + 1));
++}
++
++struct cgroup_subsys_state *css_set_pids(struct css_set *cset)
++{
++	return css_set_pids_storage(cset)->subsys;
++}
++EXPORT_SYMBOL_GPL(css_set_pids);
++
++#define CSS_SET_PIDS_KABI_SIZE sizeof(struct css_set_pids_kabi)
++#else
++#define CSS_SET_PIDS_KABI_SIZE 0
++#endif
++
++static void css_set_set_subsys(struct css_set *cset, int ssid,
++			       struct cgroup_subsys_state *css)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id) {
++		css_set_pids_storage(cset)->subsys = css;
++		return;
++	}
++#endif
++	cset->subsys[ssid] = css;
++}
++
++struct cgroup_subsys_state __rcu **
++cgroup_subsys_slot(struct cgroup *cgrp, int ssid)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id)
++		return &cgroup_pids_storage(cgrp)->subsys;
++#endif
++	return &cgrp->subsys[ssid];
++}
++
++static int *cgroup_nr_dying_subsys_slot(struct cgroup *cgrp, int ssid)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id)
++		return &cgroup_pids_storage(cgrp)->nr_dying_subsys;
++#endif
++	return &cgrp->nr_dying_subsys[ssid];
++}
++
++static struct list_head *css_set_e_cset_node(struct css_set *cset, int ssid)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id)
++		return &css_set_pids_storage(cset)->e_cset_node;
++#endif
++	return &cset->e_cset_node[ssid];
++}
++
++static struct css_set *css_set_from_e_cset_node(struct list_head *node, int ssid)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id) {
++		struct css_set_pids_kabi *pids;
++
++		pids = container_of(node, struct css_set_pids_kabi, e_cset_node);
++		if (pids == &init_css_set_pids)
++			return &init_css_set;
++		return (struct css_set *)pids - 1;
++	}
++#endif
++	return container_of(node, struct css_set, e_cset_node[ssid]);
++}
++
++static struct list_head *cgroup_e_csets(struct cgroup *cgrp, int ssid)
++{
++#ifdef CONFIG_CGROUP_PIDS
++	if (ssid == pids_cgrp_id)
++		return &cgroup_pids_storage(cgrp)->e_csets;
++#endif
++	return &cgrp->e_csets[ssid];
++}
+ 
+ static DEFINE_PER_CPU(struct cgroup_rstat_cpu, cgrp_dfl_root_rstat_cpu);
+ 
+@@ -492,7 +604,7 @@
+ 					      struct cgroup_subsys *ss)
+ {
+ 	if (CGROUP_HAS_SUBSYS_CONFIG && ss)
+-		return rcu_dereference_check(cgrp->subsys[ss->id],
++		return rcu_dereference_check(*cgroup_subsys_slot(cgrp, ss->id),
+ 					lockdep_is_held(&cgroup_mutex));
+ 	else
+ 		return &cgrp->self;
+@@ -558,7 +670,7 @@
+ 		cgrp = cgroup_parent(cgrp);
+ 	} while (cgrp);
+ 
+-	return init_css_set.subsys[ss->id];
++	return css_set_subsys(&init_css_set, ss->id);
+ }
+ 
+ /**
+@@ -590,7 +702,7 @@
+ 		cgrp = cgroup_parent(cgrp);
+ 	} while (cgrp);
+ 
+-	css = init_css_set.subsys[ss->id];
++	css = css_set_subsys(&init_css_set, ss->id);
+ 	css_get(css);
+ out_unlock:
+ 	rcu_read_unlock();
+@@ -651,7 +763,7 @@
+ 	 * be and stay valid until the enclosing operation is complete.
+ 	 */
+ 	if (CGROUP_HAS_SUBSYS_CONFIG && cft->ss)
+-		return rcu_dereference_raw(cgrp->subsys[cft->ss->id]);
++		return rcu_dereference_raw(*cgroup_subsys_slot(cgrp, cft->ss->id));
+ 	else
+ 		return &cgrp->self;
+ }
+@@ -660,22 +772,22 @@
+ /**
+  * for_each_css - iterate all css's of a cgroup
+  * @css: the iteration cursor
+- * @ssid: the index of the subsystem, CGROUP_SUBSYS_COUNT after reaching the end
++ * @ssid: the index of the subsystem, CGROUP_SUBSYS_COUNT_ACTIVE after reaching the end
+  * @cgrp: the target cgroup to iterate css's of
+  *
+  * Should be called under cgroup_mutex.
+  */
+ #define for_each_css(css, ssid, cgrp)					\
+-	for ((ssid) = 0; (ssid) < CGROUP_SUBSYS_COUNT; (ssid)++)	\
++	for ((ssid) = 0; (ssid) < CGROUP_SUBSYS_COUNT_ACTIVE; (ssid)++)	\
+ 		if (!((css) = rcu_dereference_check(			\
+-				(cgrp)->subsys[(ssid)],			\
++				*cgroup_subsys_slot((cgrp), (ssid)),	\
+ 				lockdep_is_held(&cgroup_mutex)))) { }	\
+ 		else
+ 
+ /**
+  * do_each_subsys_mask - filter for_each_subsys with a bitmask
+  * @ss: the iteration cursor
+- * @ssid: the index of @ss, CGROUP_SUBSYS_COUNT after reaching the end
++ * @ssid: the index of @ss, CGROUP_SUBSYS_COUNT_ACTIVE after reaching the end
+  * @ss_mask: the bitmask
+  *
+  * The block will only run for cases where the ssid-th bit (1 << ssid) of
+@@ -687,7 +799,7 @@
+ 		(ssid) = 0;						\
+ 		break;							\
+ 	}								\
+-	for_each_set_bit(ssid, &__ss_mask, CGROUP_SUBSYS_COUNT) {	\
++	for_each_set_bit(ssid, &__ss_mask, CGROUP_SUBSYS_COUNT_ACTIVE) {	\
+ 		(ss) = cgroup_subsys[ssid];				\
+ 		{
+ 
+@@ -913,14 +1025,15 @@
+ #define CSS_SET_HASH_BITS	7
+ static DEFINE_HASHTABLE(css_set_table, CSS_SET_HASH_BITS);
+ 
+-static unsigned long css_set_hash(struct cgroup_subsys_state **css)
++static unsigned long css_set_hash(struct css_set *cset,
++				  struct cgroup_subsys_state **template)
+ {
+ 	unsigned long key = 0UL;
+ 	struct cgroup_subsys *ss;
+ 	int i;
+ 
+ 	for_each_subsys(ss, i)
+-		key += (unsigned long)css[i];
++		key += (unsigned long)(cset ? css_set_subsys(cset, i) : template[i]);
+ 	key = (key >> 16) ^ key;
+ 
+ 	return key;
+@@ -941,8 +1054,8 @@
+ 
+ 	/* This css_set is dead. Unlink it and release cgroup and css refs */
+ 	for_each_subsys(ss, ssid) {
+-		list_del(&cset->e_cset_node[ssid]);
+-		css_put(cset->subsys[ssid]);
++		list_del(css_set_e_cset_node(cset, ssid));
++		css_put(css_set_subsys(cset, ssid));
+ 	}
+ 	hash_del(&cset->hlist);
+ 	css_set_count--;
+@@ -980,14 +1093,17 @@
+ {
+ 	struct cgroup *new_dfl_cgrp;
+ 	struct list_head *l1, *l2;
++	struct cgroup_subsys *ss;
++	int ssid;
+ 
+ 	/*
+ 	 * On the default hierarchy, there can be csets which are
+ 	 * associated with the same set of cgroups but different csses.
+ 	 * Let's first ensure that csses match.
+ 	 */
+-	if (memcmp(template, cset->subsys, sizeof(cset->subsys)))
+-		return false;
++	for_each_subsys(ss, ssid)
++		if (template[ssid] != css_set_subsys(cset, ssid))
++			return false;
+ 
+ 
+ 	/* @cset's domain should match the default cgroup's */
+@@ -1079,11 +1195,11 @@
+ 			 * @ss is not in this hierarchy, so we don't want
+ 			 * to change the css.
+ 			 */
+-			template[i] = old_cset->subsys[i];
++			template[i] = css_set_subsys(old_cset, i);
+ 		}
+ 	}
+ 
+-	key = css_set_hash(template);
++	key = css_set_hash(NULL, template);
+ 	hash_for_each_possible(css_set_table, cset, hlist, key) {
+ 		if (!compare_css_sets(cset, old_cset, cgrp, template))
+ 			continue;
+@@ -1174,7 +1290,7 @@
+ static struct css_set *find_css_set(struct css_set *old_cset,
+ 				    struct cgroup *cgrp)
+ {
+-	struct cgroup_subsys_state *template[CGROUP_SUBSYS_COUNT] = { };
++	struct cgroup_subsys_state *template[CGROUP_SUBSYS_COUNT_ACTIVE] = { };
+ 	struct css_set *cset;
+ 	struct list_head tmp_links;
+ 	struct cgrp_cset_link *link;
+@@ -1195,7 +1311,7 @@
+ 	if (cset)
+ 		return cset;
+ 
+-	cset = kzalloc(sizeof(*cset), GFP_KERNEL);
++	cset = kzalloc(sizeof(*cset) + CSS_SET_PIDS_KABI_SIZE, GFP_KERNEL);
+ 	if (!cset)
+ 		return NULL;
+ 
+@@ -1220,7 +1336,8 @@
+ 
+ 	/* Copy the set of subsystem state objects generated in
+ 	 * find_existing_css_set() */
+-	memcpy(cset->subsys, template, sizeof(cset->subsys));
++	for_each_subsys(ss, ssid)
++		css_set_set_subsys(cset, ssid, template[ssid]);
+ 
+ 	spin_lock_irq(&css_set_lock);
+ 	/* Add reference counts and links from the new css_set. */
+@@ -1237,14 +1354,14 @@
+ 	css_set_count++;
+ 
+ 	/* Add @cset to the hash table */
+-	key = css_set_hash(cset->subsys);
++	key = css_set_hash(cset, NULL);
+ 	hash_add(css_set_table, &cset->hlist, key);
+ 
+ 	for_each_subsys(ss, ssid) {
+-		struct cgroup_subsys_state *css = cset->subsys[ssid];
+-
+-		list_add_tail(&cset->e_cset_node[ssid],
+-			      &css->cgroup->e_csets[ssid]);
++		struct cgroup_subsys_state *css = css_set_subsys(cset, ssid);
++
++		list_add_tail(css_set_e_cset_node(cset, ssid),
++			      cgroup_e_csets(css->cgroup, ssid));
+ 		css_get(css);
+ 	}
+ 
+@@ -1830,7 +1947,8 @@
+ 		struct cgroup_root *src_root = ss->root;
+ 		struct cgroup *scgrp = &src_root->cgrp;
+ 		struct cgroup_subsys_state *css = cgroup_css(scgrp, ss);
+-		struct css_set *cset, *cset_pos;
++		struct css_set *cset;
++		struct list_head *node, *next;
+ 		struct css_task_iter *it;
+ 
+ 		WARN_ON(!css || cgroup_css(dcgrp, ss));
+@@ -1843,17 +1961,17 @@
+ 		}
+ 
+ 		/* rebind */
+-		RCU_INIT_POINTER(scgrp->subsys[ssid], NULL);
+-		rcu_assign_pointer(dcgrp->subsys[ssid], css);
++		RCU_INIT_POINTER(*cgroup_subsys_slot(scgrp, ssid), NULL);
++		rcu_assign_pointer(*cgroup_subsys_slot(dcgrp, ssid), css);
+ 		ss->root = dst_root;
+ 
+ 		spin_lock_irq(&css_set_lock);
+ 		css->cgroup = dcgrp;
+-		WARN_ON(!list_empty(&dcgrp->e_csets[ss->id]));
+-		list_for_each_entry_safe(cset, cset_pos, &scgrp->e_csets[ss->id],
+-					 e_cset_node[ss->id]) {
+-			list_move_tail(&cset->e_cset_node[ss->id],
+-				       &dcgrp->e_csets[ss->id]);
++		WARN_ON(!list_empty(cgroup_e_csets(dcgrp, ss->id)));
++		list_for_each_safe(node, next, cgroup_e_csets(scgrp, ss->id)) {
++			cset = css_set_from_e_cset_node(node, ss->id);
++			list_move_tail(css_set_e_cset_node(cset, ss->id),
++				       cgroup_e_csets(dcgrp, ss->id));
+ 			/*
+ 			 * all css_sets of scgrp together in same order to dcgrp,
+ 			 * patch in-flight iterators to preserve correct iteration.
+@@ -1862,8 +1980,8 @@
+ 			 * update it->cset_head is enough here.
+ 			 */
+ 			list_for_each_entry(it, &cset->task_iters, iters_node)
+-				if (it->cset_head == &scgrp->e_csets[ss->id])
+-					it->cset_head = &dcgrp->e_csets[ss->id];
++				if (it->cset_head == cgroup_e_csets(scgrp, ss->id))
++					it->cset_head = cgroup_e_csets(dcgrp, ss->id);
+ 		}
+ 		spin_unlock_irq(&css_set_lock);
+ 
+@@ -2060,7 +2178,7 @@
+ 	prev_cputime_init(&cgrp->prev_cputime);
+ 
+ 	for_each_subsys(ss, ssid)
+-		INIT_LIST_HEAD(&cgrp->e_csets[ssid]);
++		INIT_LIST_HEAD(cgroup_e_csets(cgrp, ssid));
+ 
+ 	init_waitqueue_head(&cgrp->offline_waitq);
+ 	INIT_WORK(&cgrp->release_agent_work, cgroup1_release_agent);
+@@ -2569,9 +2687,9 @@
+ 			 * has its ->mg_dst_cset set.
+ 			 */
+ 			if (cset->mg_dst_cset)
+-				*dst_cssp = cset->mg_dst_cset->subsys[tset->ssid];
++				*dst_cssp = css_set_subsys(cset->mg_dst_cset, tset->ssid);
+ 			else
+-				*dst_cssp = cset->subsys[tset->ssid];
++				*dst_cssp = css_set_subsys(cset, tset->ssid);
+ 
+ 			return task;
+ 		}
+@@ -2866,7 +2984,8 @@
+ 			put_css_set(dst_cset);
+ 
+ 		for_each_subsys(ss, ssid)
+-			if (src_cset->subsys[ssid] != dst_cset->subsys[ssid])
++			if (css_set_subsys(src_cset, ssid) !=
++			    css_set_subsys(dst_cset, ssid))
+ 				mgctx->ss_mask |= 1 << ssid;
+ 	}
+ 
+@@ -3458,7 +3577,7 @@
+ 			}
+ 			break;
+ 		} while_each_subsys_mask();
+-		if (ssid == CGROUP_SUBSYS_COUNT)
++		if (ssid == CGROUP_SUBSYS_COUNT_ACTIVE)
+ 			return -EINVAL;
+ 	}
+ 
+@@ -3713,7 +3832,7 @@
+ {
+ 	struct cgroup *cgroup = seq_css(seq)->cgroup;
+ 	struct cgroup_subsys_state *css;
+-	int dying_cnt[CGROUP_SUBSYS_COUNT];
++	int dying_cnt[CGROUP_SUBSYS_COUNT_ACTIVE];
+ 	int ssid;
+ 
+ 	seq_printf(seq, "nr_descendants %d\n",
+@@ -3727,20 +3846,20 @@
+ 	 * numbers may not be consistent when that happens.
+ 	 */
+ 	rcu_read_lock();
+-	for (ssid = 0; ssid < CGROUP_SUBSYS_COUNT; ssid++) {
++	for (ssid = 0; ssid < CGROUP_SUBSYS_COUNT_ACTIVE; ssid++) {
+ 		dying_cnt[ssid] = -1;
+ 		if ((BIT(ssid) & cgrp_dfl_inhibit_ss_mask) ||
+ 		    (cgroup_subsys[ssid]->root !=  &cgrp_dfl_root))
+ 			continue;
+-		css = rcu_dereference_raw(cgroup->subsys[ssid]);
+-		dying_cnt[ssid] = cgroup->nr_dying_subsys[ssid];
++		css = rcu_dereference_raw(*cgroup_subsys_slot(cgroup, ssid));
++		dying_cnt[ssid] = *cgroup_nr_dying_subsys_slot(cgroup, ssid);
+ 		seq_printf(seq, "nr_subsys_%s %d\n", cgroup_subsys[ssid]->name,
+ 			   css ? (css->nr_descendants + 1) : 0);
+ 	}
+ 
+ 	seq_printf(seq, "nr_dying_descendants %d\n",
+ 		   cgroup->nr_dying_descendants);
+-	for (ssid = 0; ssid < CGROUP_SUBSYS_COUNT; ssid++) {
++	for (ssid = 0; ssid < CGROUP_SUBSYS_COUNT_ACTIVE; ssid++) {
+ 		if (dying_cnt[ssid] >= 0)
+ 			seq_printf(seq, "nr_dying_subsys_%s %d\n",
+ 				   cgroup_subsys[ssid]->name, dying_cnt[ssid]);
+@@ -4851,7 +4970,7 @@
+ 	}
+ 
+ 	if (it->ss) {
+-		cset = container_of(l, struct css_set, e_cset_node[it->ss->id]);
++		cset = css_set_from_e_cset_node(l, it->ss->id);
+ 	} else {
+ 		link = list_entry(l, struct cgrp_cset_link, cset_link);
+ 		cset = link->cset;
+@@ -5016,7 +5135,7 @@
+ 	it->flags = flags;
+ 
+ 	if (CGROUP_HAS_SUBSYS_CONFIG && it->ss)
+-		it->cset_pos = &css->cgroup->e_csets[css->ss->id];
++		it->cset_pos = cgroup_e_csets(css->cgroup, css->ss->id);
+ 	else
+ 		it->cset_pos = &css->cgroup->cset_links;
+ 
+@@ -5511,7 +5630,7 @@
+ 		if (ss->css_released)
+ 			ss->css_released(css);
+ 
+-		cgrp->nr_dying_subsys[ss->id]--;
++		(*cgroup_nr_dying_subsys_slot(cgrp, ss->id))--;
+ 		/*
+ 		 * When a css is released and ready to be freed, its
+ 		 * nr_descendants must be zero. However, the corresponding
+@@ -5522,7 +5641,7 @@
+ 		WARN_ON_ONCE(css->nr_descendants);
+ 		parent_cgrp = cgroup_parent(cgrp);
+ 		while (parent_cgrp) {
+-			parent_cgrp->nr_dying_subsys[ss->id]--;
++			(*cgroup_nr_dying_subsys_slot(parent_cgrp, ss->id))--;
+ 			parent_cgrp = cgroup_parent(parent_cgrp);
+ 		}
+ 	} else {
+@@ -5606,7 +5725,7 @@
+ 		ret = ss->css_online(css);
+ 	if (!ret) {
+ 		css->flags |= CSS_ONLINE;
+-		rcu_assign_pointer(css->cgroup->subsys[ss->id], css);
++		rcu_assign_pointer(*cgroup_subsys_slot(css->cgroup, ss->id), css);
+ 
+ 		atomic_inc(&css->online_cnt);
+ 		if (css->parent) {
+@@ -5632,18 +5751,18 @@
+ 		ss->css_offline(css);
+ 
+ 	css->flags &= ~CSS_ONLINE;
+-	RCU_INIT_POINTER(css->cgroup->subsys[ss->id], NULL);
++	RCU_INIT_POINTER(*cgroup_subsys_slot(css->cgroup, ss->id), NULL);
+ 
+ 	wake_up_all(&css->cgroup->offline_waitq);
+ 
+-	css->cgroup->nr_dying_subsys[ss->id]++;
++	(*cgroup_nr_dying_subsys_slot(css->cgroup, ss->id))++;
+ 	/*
+ 	 * Parent css and cgroup cannot be freed until after the freeing
+ 	 * of child css, see css_free_rwork_fn().
+ 	 */
+ 	while ((css = css->parent)) {
+ 		css->nr_descendants--;
+-		css->cgroup->nr_dying_subsys[ss->id]++;
++		(*cgroup_nr_dying_subsys_slot(css->cgroup, ss->id))++;
+ 	}
+ }
+ 
+@@ -5716,7 +5835,8 @@
+ 	int ret;
+ 
+ 	/* allocate the cgroup and its ID, 0 is reserved for the root */
+-	cgrp = kzalloc(struct_size(cgrp, ancestors, (level + 1)), GFP_KERNEL);
++	cgrp = kzalloc(size_add(struct_size(cgrp, ancestors, (level + 1)),
++				CGROUP_PIDS_KABI_SIZE), GFP_KERNEL);
+ 	if (!cgrp)
+ 		return ERR_PTR(-ENOMEM);
+ 
+@@ -5738,11 +5858,10 @@
+ 	}
+ 	cgrp->kn = kn;
+ 
+-	init_cgroup_housekeeping(cgrp);
+-
+ 	cgrp->self.parent = &parent->self;
+ 	cgrp->root = root;
+ 	cgrp->level = level;
++	init_cgroup_housekeeping(cgrp);
+ 
+ 	ret = psi_cgroup_alloc(cgrp);
+ 	if (ret)
+@@ -6135,7 +6254,7 @@
+ 	 * pointer to this state - since the subsystem is
+ 	 * newly registered, all tasks and hence the
+ 	 * init_css_set is in the subsystem's root cgroup. */
+-	init_css_set.subsys[ss->id] = css;
++	css_set_set_subsys(&init_css_set, ss->id, css);
+ 
+ 	have_fork_callback |= (bool)ss->fork << ss->id;
+ 	have_exit_callback |= (bool)ss->exit << ss->id;
+@@ -6200,7 +6319,7 @@
+ 	struct cgroup_subsys *ss;
+ 	int ssid;
+ 
+-	BUILD_BUG_ON(CGROUP_SUBSYS_COUNT > 16);
++	BUILD_BUG_ON(CGROUP_SUBSYS_COUNT_ACTIVE > 16);
+ 	BUG_ON(cgroup_init_cftypes(NULL, cgroup_base_files));
+ 	BUG_ON(cgroup_init_cftypes(NULL, cgroup_psi_files));
+ 	BUG_ON(cgroup_init_cftypes(NULL, cgroup1_base_files));
+@@ -6216,7 +6335,7 @@
+ 	 * it during init.
+ 	 */
+ 	hash_add(css_set_table, &init_css_set.hlist,
+-		 css_set_hash(init_css_set.subsys));
++		 css_set_hash(&init_css_set, NULL));
+ 
+ 	BUG_ON(cgroup_setup_root(&cgrp_dfl_root, 0));
+ 
+@@ -6225,7 +6344,7 @@
+ 	for_each_subsys(ss, ssid) {
+ 		if (ss->early_init) {
+ 			struct cgroup_subsys_state *css =
+-				init_css_set.subsys[ss->id];
++				css_set_subsys(&init_css_set, ss->id);
+ 
+ 			css->id = cgroup_idr_alloc(&ss->css_idr, css, 1, 2,
+ 						   GFP_KERNEL);
+@@ -6234,8 +6353,8 @@
+ 			cgroup_init_subsys(ss, false);
+ 		}
+ 
+-		list_add_tail(&init_css_set.e_cset_node[ssid],
+-			      &cgrp_dfl_root.cgrp.e_csets[ssid]);
++		list_add_tail(css_set_e_cset_node(&init_css_set, ssid),
++			      cgroup_e_csets(&cgrp_dfl_root.cgrp, ssid));
+ 
+ 		/*
+ 		 * Setting dfl_root subsys_mask needs to consider the
+@@ -6270,17 +6389,17 @@
+ 		}
+ 
+ 		if (ss->bind)
+-			ss->bind(init_css_set.subsys[ssid]);
++			ss->bind(css_set_subsys(&init_css_set, ssid));
+ 
+ 		cgroup_lock();
+-		css_populate_dir(init_css_set.subsys[ssid]);
++		css_populate_dir(css_set_subsys(&init_css_set, ssid));
+ 		cgroup_unlock();
+ 	}
+ 
+ 	/* init_css_set.subsys[] has been updated, re-hash */
+ 	hash_del(&init_css_set.hlist);
+ 	hash_add(css_set_table, &init_css_set.hlist,
+-		 css_set_hash(init_css_set.subsys));
++		 css_set_hash(&init_css_set, NULL));
+ 
+ 	WARN_ON(sysfs_create_mount_point(fs_kobj, "cgroup"));
+ 	WARN_ON(register_filesystem(&cgroup_fs_type));
+diff --git a/kernel/cgroup/cpuset.c b/kernel/cgroup/cpuset.c
+index 2ce588516ae5..9b3c5884175b 100644
+--- a/kernel/cgroup/cpuset.c
++++ b/kernel/cgroup/cpuset.c
+@@ -3523,7 +3523,7 @@
+  */
+ static int cpuset_can_fork(struct task_struct *task, struct css_set *cset)
+ {
+-	struct cpuset *cs = css_cs(cset->subsys[cpuset_cgrp_id]);
++	struct cpuset *cs = css_cs(css_set_subsys(cset, cpuset_cgrp_id));
+ 	bool same_cs;
+ 	int ret;
+ 
+@@ -3562,7 +3562,7 @@
+ 
+ static void cpuset_cancel_fork(struct task_struct *task, struct css_set *cset)
+ {
+-	struct cpuset *cs = css_cs(cset->subsys[cpuset_cgrp_id]);
++	struct cpuset *cs = css_cs(css_set_subsys(cset, cpuset_cgrp_id));
+ 	bool same_cs;
+ 
+ 	rcu_read_lock();
+diff --git a/kernel/cgroup/debug.c b/kernel/cgroup/debug.c
+index 80aa3f027ac3..d414fc4dbdcd 100644
+--- a/kernel/cgroup/debug.c
++++ b/kernel/cgroup/debug.c
+@@ -61,7 +61,7 @@
+ 	 * Print the css'es stored in the current css_set.
+ 	 */
+ 	for_each_subsys(ss, i) {
+-		css = cset->subsys[ss->id];
++		css = css_set_subsys(cset, ss->id);
+ 		if (!css)
+ 			continue;
+ 		seq_printf(seq, "%2d: %-4s\t- %p[%d]\n", ss->id, ss->name,
+@@ -214,7 +214,7 @@
+ 		return -ENODEV;
+ 
+ 	for_each_subsys(ss, i) {
+-		css = rcu_dereference_check(cgrp->subsys[ss->id], true);
++		css = rcu_dereference_check(*cgroup_subsys_slot(cgrp, ss->id), true);
+ 		if (!css)
+ 			continue;
+ 
+diff --git a/kernel/cgroup/pids.c b/kernel/cgroup/pids.c
+index 8f61114c36dd..8f87608b85bd 100644
+--- a/kernel/cgroup/pids.c
++++ b/kernel/cgroup/pids.c
+@@ -275,7 +275,7 @@
+ 	struct pids_cgroup *pids, *pids_over_limit;
+ 	int err;
+ 
+-	pids = css_pids(cset->subsys[pids_cgrp_id]);
++	pids = css_pids(css_set_subsys(cset, pids_cgrp_id));
+ 	err = pids_try_charge(pids, 1, &pids_over_limit);
+ 	if (err)
+ 		pids_event(pids, pids_over_limit);
+@@ -287,7 +287,7 @@
+ {
+ 	struct pids_cgroup *pids;
+ 
+-	pids = css_pids(cset->subsys[pids_cgrp_id]);
++	pids = css_pids(css_set_subsys(cset, pids_cgrp_id));
+ 	pids_uncharge(pids, 1);
+ }
+ 
